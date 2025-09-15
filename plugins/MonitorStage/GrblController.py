@@ -2,7 +2,7 @@ import time
 import serial
 import serial.tools.list_ports
 from UM.Logger import Logger
-from PyQt6.QtCore import QObject, pyqtSignal
+from PyQt6.QtCore import QObject, pyqtSignal, pyqtProperty
 
 class GrblController(QObject):
     connection_status_changed = pyqtSignal(bool)
@@ -17,7 +17,7 @@ class GrblController(QObject):
     def __init__(self): # No printer_output_device
         super().__init__()
         self._serial_port = None # New: Serial port object
-        self.is_connected = False
+        self._is_connected = False
         self.last_reconnect_attempt = 0
         self._received_data_buffer = []
         self.target_temperatures = {"T0": 20, "T1": 20}
@@ -28,14 +28,14 @@ class GrblController(QObject):
         Logger.log("d", "Attempting to connect to GRBL device via serial port.")
         if self._serial_port and self._serial_port.is_open:
             Logger.log("d", "Already connected to a serial port.")
-            self.is_connected = True
+            self._set_connected(True)
             self.connection_status_changed.emit(self.is_connected)
             return
 
         ports = serial.tools.list_ports.comports()
         if not ports:
             Logger.log("w", "No serial ports found.")
-            self.is_connected = False
+            self._set_connected(False)
             self.connection_status_changed.emit(self.is_connected)
             return
 
@@ -43,16 +43,16 @@ class GrblController(QObject):
             Logger.log("d", f"Found port: {p.device}")
             try:
                 self._serial_port = serial.Serial(p.device, 115200, timeout=1) # 115200 baud rate, 1 second timeout
-                time.sleep(2) # Wait for GRBL to initialize
+                # time.sleep(2) # Wait for GRBL to initialize
                 self._serial_port.flushInput() # Clear input buffer
                 Logger.log("d", f"Successfully connected to {p.device}")
-                self.is_connected = True
+                self._set_connected(True)
                 break
             except serial.SerialException as e:
-                Logger.log("e", f"Failed to connect to {p.device}: {e}")
-                self.is_connected = False
+                Logger.log("i", f"Failed to connect to {p.device}: {e}")
+                self._set_connected(False)
         
-        if self.is_connected:
+        if self._is_connected:
             Logger.log("d", "GrblController connected.")
             # Send GRBL initialization commands and wait for 'ok'
             self.send_gcode("$22=0")  # disable homing
@@ -76,10 +76,10 @@ class GrblController(QObject):
         if self.is_connected and self._serial_port and self._serial_port.is_open:
             Logger.log("d", f"Sending G-code: {command.strip()}")
             try:
-                self._serial_port.write(f"{command.strip()}\n".encode('utf-8'))
+                self._serial_port.write(f"{command.strip()}\r\n".encode('utf-8'))
             except serial.SerialException as e:
                 Logger.log("e", f"Failed to send G-code: {e}")
-                self.is_connected = False
+                self._set_connected(False)
                 self.connection_status_changed.emit(self.is_connected)
         else:
             Logger.log("w", f"Cannot send G-code, GrblController not connected: {command.strip()}")
@@ -91,12 +91,18 @@ class GrblController(QObject):
         Logger.log("d", "Waiting for 'ok' from printer...")
         t_0 = time.time()
         while time.time() - t_0 < self.SERIAL_TIMEOUT:
-            for i, line in enumerate(self._received_data_buffer):
-                if "ok" in line:
-                    del self._received_data_buffer[:i+1] # Clear processed data
-                    Logger.log("d", "Received 'ok'.")
-                    return True
-            time.sleep(0.01) # Small delay to prevent busy-waiting
+            try:
+                if self._serial_port and self._serial_port.in_waiting:
+                    line = self._serial_port.readline().decode('utf-8').strip()
+                    if line:
+                        Logger.log("i", f"Received line: {line}")
+                        if "ok" in line.lower():
+                            Logger.log("d", "Received 'ok'.")
+                            return True
+            except serial.SerialException as e:
+                Logger.log("e", f"Error reading serial: {e}")
+                break
+            time.sleep(0.01)
         Logger.log("w", "Timeout waiting for 'ok'.")
         return False
 
@@ -117,7 +123,7 @@ class GrblController(QObject):
                     self.data_received.emit(line)
         except serial.SerialException as e:
             Logger.log("e", f"Error reading from serial port: {e}")
-            self.is_connected = False
+            self._set_connected(False)
             self.connection_status_changed.emit(self.is_connected)
             return
 
@@ -158,7 +164,7 @@ class GrblController(QObject):
         self.wait_for_ok()
 
     def handle(self, event):
-        if not self.is_connected:
+        if not self._is_connected:
              return
         try:
             # Placeholder for event classes
@@ -210,7 +216,7 @@ class GrblController(QObject):
                 Logger.log("w", "Event not caught: " + str(event))
         except Exception as e: # Catch all exceptions for now
             Logger.log("e", f"Error handling event: {e}")
-            self.is_connected = False
+            self._set_connected(False)
             # self.register_event(events.ArduinoDisconnected()) # events not implemented
             self.connection_status_changed.emit(self.is_connected)
 
@@ -224,3 +230,12 @@ class GrblController(QObject):
         Logger.log("w", f"set_gcode_file method is a placeholder and not fully implemented for Cura's active printer. Filename: {filename}")
         # This would typically involve loading a G-code file and preparing it for printing
         pass
+
+    @pyqtProperty(bool, notify=connection_status_changed)
+    def is_connected(self):
+        return self._is_connected
+
+    def _set_connected(self, value: bool):
+        if self._is_connected != value:
+            self._is_connected = value
+            self.connection_status_changed.emit(value)

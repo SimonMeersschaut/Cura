@@ -9,7 +9,7 @@ Rectangle
 
     property var machineManager: Cura.MachineManager
     property var activeMachine: machineManager.activeMachine
-    property bool isMachineConnected: activeMachine ? activeMachine.is_connected : false
+    property bool isMachineConnected: false
 
     color: "#FAFAFA"
     anchors.fill: parent

@@ -17,17 +17,23 @@ class MonitorStage(CuraStage):
         self._grbl_controller = None # New member variable
 
     def _onOutputDevicesChanged(self):
-        # Instantiate GrblController and connect
-        if self._grbl_controller is None: # Only instantiate once
+        if self._grbl_controller is None:  # Only instantiate once
             self._grbl_controller = GrblController()
             self._grbl_controller.connect()
 
+            # Expose GrblController to QML right here
+            app = Application.getInstance()
+            app.getQmlEngine().rootContext().setContextProperty("grblController", self._grbl_controller)
+
+    def _onConnectionStatusChanged(self, is_connected: bool):
+        self.setOutputDeviceConnected(is_connected)
+
     def _onEngineCreated(self):
-        # We can only connect now, as we need to be sure that everything is loaded (plugins get created quite early)
-        Application.getInstance().getMachineManager().outputDevicesChanged.connect(self._onOutputDevicesChanged)
+        app = Application.getInstance()
+        app.getMachineManager().outputDevicesChanged.connect(self._onOutputDevicesChanged)
         self._onOutputDevicesChanged()
 
-        plugin_path = Application.getInstance().getPluginRegistry().getPluginPath(self.getPluginId())
+        plugin_path = app.getPluginRegistry().getPluginPath(self.getPluginId())
         if plugin_path is not None:
             menu_component_path = os.path.join(plugin_path, "MonitorMenu.qml")
             main_component_path = os.path.join(plugin_path, "MonitorMain.qml")
