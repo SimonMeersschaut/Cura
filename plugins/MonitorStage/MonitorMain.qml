@@ -7,9 +7,18 @@ Rectangle
 {
     id: viewportOverlay
 
-    property var machineManager: Cura.MachineManager
-    property var activeMachine: machineManager.activeMachine
-    property bool isMachineConnected: false
+    property var machineManager: machineManager
+    property var activeMachine: machineManager ? machineManager.activeMachine : null
+    property bool isMachineConnected: activeMachine ? activeMachine.is_connected : false
+
+    property var grblController: grblController
+    property bool isConnected: grblController ? grblController.is_connected : false
+
+    // Add a debug message property
+    property string debugMessage: !machineManager ? "machineManager is not set!" :
+                                  !activeMachine ? "activeMachine is not set!" :
+                                  !grblController ? "grblController is not set!" :
+                                  ""
 
     color: "#FAFAFA"
     anchors.fill: parent
@@ -24,6 +33,37 @@ Rectangle
     {
         anchors.centerIn: parent
         spacing: 10
+
+        // Show debug message if there is an error
+        Text {
+            visible: debugMessage.length > 0
+            text: debugMessage
+            color: "red"
+            font.pointSize: 16
+            anchors.horizontalCenter: parent.horizontalCenter
+        }
+
+        // Connection control
+        Row {
+            spacing: 10
+            Button {
+                text: isConnected ? "Disconnect" : "Connect"
+                onClicked: {
+                    if (grblController) {
+                        if (!isConnected) {
+                            grblController.connect()
+                        } else {
+                            grblController.disconnect()
+                        }
+                    }
+                }
+            }
+            Text {
+                text: isConnected ? "Connected" : "Disconnected"
+                color: isConnected ? "green" : "red"
+                font.pointSize: 16
+            }
+        }
 
         // Graph Placeholder
         Rectangle

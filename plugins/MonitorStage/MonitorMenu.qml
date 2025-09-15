@@ -11,8 +11,8 @@ Rectangle
 {
     id: root
 
-    property var machineManager: Cura.MachineManager
-    property var activeMachine: machineManager.activeMachine
+    property var machineManager: machineManager
+    property var activeMachine: machineManager ? machineManager.activeMachine : null
     property bool isMachineConnected: activeMachine ? activeMachine.is_connected : false
 
     color: isMachineConnected ? "green" : "red"

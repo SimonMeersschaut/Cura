@@ -9,6 +9,9 @@ from .GrblController import GrblController # New import
 class MonitorStage(CuraStage):
     """Stage for monitoring a 3D printing while it's printing."""
 
+    def getPluginId(self) -> str:
+        return "MonitorStage"
+
     def __init__(self, parent = None):
         super().__init__(parent)
 
@@ -19,11 +22,12 @@ class MonitorStage(CuraStage):
     def _onOutputDevicesChanged(self):
         if self._grbl_controller is None:  # Only instantiate once
             self._grbl_controller = GrblController()
-            self._grbl_controller.connect()
 
             # Expose GrblController to QML right here
             app = Application.getInstance()
             app.getQmlEngine().rootContext().setContextProperty("grblController", self._grbl_controller)
+            # Expose machineManager to QML
+            app.getQmlEngine().rootContext().setContextProperty("machineManager", app.getMachineManager())
 
     def _onConnectionStatusChanged(self, is_connected: bool):
         self.setOutputDeviceConnected(is_connected)
