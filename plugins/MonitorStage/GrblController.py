@@ -76,7 +76,7 @@ class GrblController(QObject):
         if self.is_connected and self._serial_port and self._serial_port.is_open:
             Logger.log("d", f"Sending G-code: {command.strip()}")
             try:
-                self._serial_port.write(f"{command.strip()}\n".encode('utf-8'))
+                self._serial_port.write(f"{command.strip()}\r\n".encode('utf-8'))
             except serial.SerialException as e:
                 Logger.log("e", f"Failed to send G-code: {e}")
                 self.is_connected = False
@@ -91,12 +91,18 @@ class GrblController(QObject):
         Logger.log("d", "Waiting for 'ok' from printer...")
         t_0 = time.time()
         while time.time() - t_0 < self.SERIAL_TIMEOUT:
-            for i, line in enumerate(self._received_data_buffer):
-                if "ok" in line:
-                    del self._received_data_buffer[:i+1] # Clear processed data
-                    Logger.log("d", "Received 'ok'.")
-                    return True
-            time.sleep(0.01) # Small delay to prevent busy-waiting
+            try:
+                if self._serial_port and self._serial_port.in_waiting:
+                    line = self._serial_port.readline().decode('utf-8').strip()
+                    if line:
+                        Logger.log("i", f"Received line: {line}")
+                        if "ok" in line.lower():
+                            Logger.log("d", "Received 'ok'.")
+                            return True
+            except serial.SerialException as e:
+                Logger.log("e", f"Error reading serial: {e}")
+                break
+            time.sleep(0.01)
         Logger.log("w", "Timeout waiting for 'ok'.")
         return False
 
